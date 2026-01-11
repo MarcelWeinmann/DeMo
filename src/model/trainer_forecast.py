@@ -90,7 +90,7 @@ class Trainer(pl.LightningModule):
         dense_predict = out.get("dense_predict", None)
 
         # gt
-        y, y_others = data["target"][:, 0], data["target"][:, 1:]
+        y, y_others = data["target"][:, 0], data["target"][:, 0:]
 
         # loss for output of state query
         if dense_predict is not None:
@@ -119,7 +119,7 @@ class Trainer(pl.LightningModule):
             new_pi_reg_loss = 0
 
         # loss for other agents
-        others_reg_mask = data["target_mask"][:, 1:]
+        others_reg_mask = data["target_mask"][:, 0:]
         others_reg_loss = F.smooth_l1_loss(
             y_hat_others[others_reg_mask], y_others[others_reg_mask]
         )

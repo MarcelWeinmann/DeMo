@@ -18,7 +18,9 @@ def preprocess(args):
 
     for mode in ["train", "val", "test"]:
         save_dir = Path("data/DeMo_processed") / mode
-        extractor = Av2Extractor(save_path=save_dir, mode=mode)
+        extractor = Av2Extractor(save_path=save_dir, mode=mode,
+                                 num_historical_steps=args.num_historical_steps,
+                                 num_future_steps=args.num_future_steps)
 
         save_dir.mkdir(exist_ok=True, parents=True)
         scenario_files = glob_files(data_root, mode)
@@ -36,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument("--data_root", "-d", type=str, default='/path/to/data_root')
     parser.add_argument("--batch", "-b", type=int, default=50)
     parser.add_argument("--parallel", "-p", action="store_true")
+    parser.add_argument("--num_historical_steps", type=int, default=50)
+    parser.add_argument("--num_future_steps", type=int, default=60)
 
     args = parser.parse_args()
     preprocess(args)

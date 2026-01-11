@@ -21,12 +21,16 @@ class Av2Extractor:
         mode: str = "train",
         ignore_type: List[int] = [5, 6, 7, 8, 9],
         remove_outlier_actors: bool = True,
+        num_historical_steps: int = 50,
+        num_future_steps: int = 60,
     ) -> None:
         self.save_path = save_path
         self.mode = mode
         self.radius = radius
         self.remove_outlier_actors = remove_outlier_actors
         self.ignore_type = ignore_type
+        self.num_historical_steps = num_historical_steps
+        self.num_future_steps = num_future_steps
 
     def save(self, file: Path):
         assert self.save_path is not None
@@ -51,11 +55,12 @@ class Av2Extractor:
         actor_ids = list(df["track_id"].unique())
         num_nodes = len(actor_ids)
 
-        x = torch.zeros(num_nodes, 110, 2, dtype=torch.float)
+        sequence_len = self.num_historical_steps + self.num_future_steps
+        x = torch.zeros(num_nodes, sequence_len, 2, dtype=torch.float)
         x_attr = torch.zeros(num_nodes, 3, dtype=torch.uint8)
-        x_heading = torch.zeros(num_nodes, 110, dtype=torch.float)
-        x_velocity = torch.zeros(num_nodes, 110, dtype=torch.float)
-        padding_mask = torch.ones(num_nodes, 110, dtype=torch.bool)
+        x_heading = torch.zeros(num_nodes, sequence_len, dtype=torch.float)
+        x_velocity = torch.zeros(num_nodes, sequence_len, dtype=torch.float)
+        padding_mask = torch.ones(num_nodes, sequence_len, dtype=torch.bool)
         scored_idx = []
 
         for actor_id, actor_df in df.groupby("track_id"):

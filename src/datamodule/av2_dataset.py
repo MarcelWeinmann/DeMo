@@ -12,20 +12,20 @@ class Av2Dataset(Dataset):
         data_root: Path,
         split: str = None,
         num_historical_steps: int = 50,
+        num_future_steps: int = 60,
         sequence_origins: List[int] = [50],
         radius: float = 150.0,
         train_mode: str = 'only_focal',
 
     ):
-        assert sequence_origins[-1] == 50 and num_historical_steps <= 50
         assert train_mode in ['only_focal', 'focal_and_scored']
         assert split in ['train', 'val', 'test']
         super(Av2Dataset, self).__init__()
-        
+
         self.data_folder = Path(data_root) / split
         self.file_list = sorted(list(self.data_folder.glob('*.pt')))
         self.num_historical_steps = num_historical_steps
-        self.num_future_steps = 0 if split =='test' else 60
+        self.num_future_steps = 0 if split =='test' else num_future_steps
         self.sequence_origins = sequence_origins
         self.mode = 'only_focal' if split != 'train' else train_mode
         self.radius = radius
@@ -138,7 +138,7 @@ class Av2Dataset(Dataset):
             valid_mask = valid_mask[:, :self.num_historical_steps]
             target = torch.where(
                 target_mask.unsqueeze(-1),
-                target - pos_ctr.unsqueeze(1), torch.zeros(pos_ctr.size(0), 60, 2),   
+                target - pos_ctr.unsqueeze(1), torch.zeros(pos_ctr.size(0), self.num_future_steps, 2),   
             )
         else:
             target = target_mask = None

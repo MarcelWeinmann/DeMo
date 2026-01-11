@@ -9,7 +9,7 @@ from .layers.mamba.vim_mamba import init_weights, create_block
 from functools import partial
 from timm.models.layers import DropPath, to_2tuple
 try:
-    from mamba_ssm.ops.triton.layernorm import RMSNorm, layer_norm_fn, rms_norm_fn
+    from mamba_ssm.ops.triton.layer_norm import RMSNorm, layer_norm_fn, rms_norm_fn
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
@@ -27,6 +27,7 @@ class ModelForecast(nn.Module):
     ) -> None:
         super().__init__()
 
+        self.future_steps = future_steps
         self.hist_embed_mlp = nn.Sequential(
             nn.Linear(4, 64),
             nn.GELU(),
@@ -81,7 +82,7 @@ class ModelForecast(nn.Module):
             nn.Linear(1, 64), nn.GELU(), nn.Linear(64, embed_dim)
         )
 
-        self.time_decoder = TimeDecoder()
+        self.time_decoder = TimeDecoder(future_len=future_steps)
 
         self.initialize_weights()
 
@@ -215,11 +216,11 @@ class ModelForecast(nn.Module):
         mode = None
 
         # outputs of other agents
-        x_others = x_encoder[:, 1:N]
+        x_others = x_encoder[:, 0:N]
         y_hat_others = self.dense_predictor(x_others).view(B, x_others.size(1), -1, 2)
 
         # state query initialization
-        time = torch.arange(60).long().to(x_encoder.device)
+        time = torch.arange(self.future_steps).long().to(x_encoder.device)
         time = time * 0.1 + 0.1
         time = time.unsqueeze(-1)
         mode = self.time_embedding_mlp(time)

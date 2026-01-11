@@ -6,7 +6,7 @@ target:
   model:
     type: 'ModelForecast'
     embed_dim: 128
-    future_steps: 60
+    future_steps: 80
     num_heads: 8
     mlp_ratio: 4.0
     qkv_bias: False
