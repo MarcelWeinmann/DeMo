@@ -41,7 +41,7 @@ def main(conf):
         max_epochs=conf.epochs,
         accelerator="gpu",
         devices=conf.gpus,
-        strategy="ddp_find_unused_parameters_false",
+        strategy="ddp_find_unused_parameters_true",
         callbacks=callbacks,
         limit_train_batches=conf.limit_train_batches,
         limit_val_batches=conf.limit_val_batches,

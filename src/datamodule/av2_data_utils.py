@@ -41,7 +41,8 @@ def load_av2_df(scenario_file: Path):
     scenario_id = scenario_file.stem.split("_")[-1]
     df = pd.read_parquet(scenario_file)
     static_map = ArgoverseStaticMap.from_json(
-        scenario_file.parents[0] / f"log_map_archive_{scenario_id}.json"
+        static_map_path=scenario_file.parents[0] / f"log_map_archive_{scenario_id}.json",
+        overwrite_centerline=False
     )
 
     return df, static_map, scenario_id
