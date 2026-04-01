@@ -98,6 +98,8 @@ class Av2Extractor:
 
         (
             lane_positions,
+            left_lane_boundary_positions,
+            right_lane_boundary_positions,
             is_intersections,
             lane_attr,
         ) = self.get_lane_features(am)
@@ -109,6 +111,8 @@ class Av2Extractor:
             "x_velocity": x_velocity,
             "x_valid_mask": ~padding_mask,
             "lane_positions": lane_positions,
+            "left_lane_boundary_positions": left_lane_boundary_positions,
+            "right_lane_boundary_positions": right_lane_boundary_positions,
             "lane_attr": lane_attr,
             "is_intersections": is_intersections,
             "scenario_id": scenario_id,
@@ -124,17 +128,23 @@ class Av2Extractor:
     ):
         lane_segments = am.get_scenario_lane_segments()
 
-        lane_positions, is_intersections, lane_attrs = [], [], []
+        lane_positions, left_lane_boundary_positions, right_lane_boundary_positions, is_intersections, lane_attrs = [], [], [], [], []
         for segment in lane_segments:
             _, lane_width = interp_utils.compute_midpoint_line(
                 left_ln_boundary=segment.left_lane_boundary.xyz,
                 right_ln_boundary=segment.right_lane_boundary.xyz,
                 num_interp_pts=segment.right_lane_boundary.xyz.shape[0],
             )
+            left_lane_bound = torch.from_numpy(segment.left_lane_boundary.xyz[:, :2]).float()
+            right_lane_bound = torch.from_numpy(segment.right_lane_boundary.xyz[:, :2]).float()
             lane_centerline = torch.from_numpy(segment.centerline.xyz[:, :2]).float()
+
             is_intersection = am.lane_is_in_intersection(segment.id)
 
+            left_lane_boundary_positions.append(left_lane_bound)
+            right_lane_boundary_positions.append(right_lane_bound)
             lane_positions.append(lane_centerline)
+
             is_intersections.append(is_intersection)
 
             lane_type = LaneTypeMap[segment.lane_type]
@@ -144,11 +154,15 @@ class Av2Extractor:
             lane_attrs.append(attribute)
 
         lane_positions = torch.stack(lane_positions)
+        left_lane_boundary_positions = torch.stack(left_lane_boundary_positions)
+        right_lane_boundary_positions = torch.stack(right_lane_boundary_positions)
         is_intersections = torch.Tensor(is_intersections)
         lane_attrs = torch.stack(lane_attrs, dim=0)
 
         return (
             lane_positions,
+            left_lane_boundary_positions,
+            right_lane_boundary_positions,
             is_intersections,
             lane_attrs,
         )

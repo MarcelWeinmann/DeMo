@@ -89,30 +89,64 @@ class Av2Dataset(Dataset):
 
         # transform lanes to local
         l_pos = data['lane_positions']
+        l_left = data['left_lane_boundary_positions']
+        l_right = data['right_lane_boundary_positions']
         l_attr = data['lane_attr']
         l_is_int = data['is_intersections']
         l_pos = torch.matmul(l_pos.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos.size(1), 2).to(torch.float32)
+        l_left = torch.matmul(l_left.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_left.size(1), 2).to(torch.float32)
+        l_right = torch.matmul(l_right.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_right.size(1), 2).to(torch.float32)
 
-        l_ctr = l_pos[:, 9:11].mean(dim=1)
+        # Find index of the minimum distance for each lane
+        dist_sq = l_pos[..., 0]**2 + l_pos[..., 1]**2
+        closest_idx = torch.argmin(dist_sq, dim=1)
+        idx1 = torch.clamp(closest_idx, max=l_pos.shape[1] - 2)
+        idx2 = idx1 + 1
+        batch_indices = torch.arange(l_pos.shape[0], device=l_pos.device)
+        p1 = l_pos[batch_indices, idx1]
+        p2 = l_pos[batch_indices, idx2]
+        l_ctr = (p1 + p2) / 2.0
         l_head = torch.atan2(
-            l_pos[:, 10, 1] - l_pos[:, 9, 1],
-            l_pos[:, 10, 0] - l_pos[:, 9, 0],
+            p2[:, 1] - p1[:, 1],
+            p2[:, 0] - p1[:, 0],
         )
         l_valid_mask = (
             (l_pos[:, :, 0] > -self.radius) & (l_pos[:, :, 0] < self.radius)
             & (l_pos[:, :, 1] > -self.radius) & (l_pos[:, :, 1] < self.radius)
         )
 
+        l_left_valid_mask = (
+            (l_left[:, :, 0] > -self.radius) & (l_left[:, :, 0] < self.radius)
+            & (l_left[:, :, 1] > -self.radius) & (l_left[:, :, 1] < self.radius)
+        )
+        l_right_valid_mask = (
+            (l_right[:, :, 0] > -self.radius) & (l_right[:, :, 0] < self.radius)
+            & (l_right[:, :, 1] > -self.radius) & (l_right[:, :, 1] < self.radius)
+        )
+
         l_mask = l_valid_mask.any(dim=-1)
+        l_left_mask = l_left_valid_mask.any(dim=-1)
+        l_right_mask = l_right_valid_mask.any(dim=-1)
         l_pos = l_pos[l_mask]
+        l_left = l_left[l_left_mask]
+        l_right = l_right[l_right_mask]
         l_is_int = l_is_int[l_mask]
         l_attr = l_attr[l_mask]
         l_ctr = l_ctr[l_mask]
         l_head = l_head[l_mask]
         l_valid_mask = l_valid_mask[l_mask]
+        l_left_valid_mask = l_left_valid_mask[l_left_mask]
+        l_right_valid_mask = l_right_valid_mask[l_right_mask]
+
 
         l_pos = torch.where(
             l_valid_mask[..., None], l_pos, torch.zeros_like(l_pos)
+        )
+        l_left = torch.where(
+            l_left_valid_mask[..., None], l_left, torch.zeros_like(l_left)
+        )
+        l_right = torch.where(
+            l_right_valid_mask[..., None], l_right, torch.zeros_like(l_right)
         )
 
         # remove outliers
@@ -200,10 +234,14 @@ class Av2Dataset(Dataset):
             'x_valid_mask': valid_mask,
 
             'lane_positions': l_pos,
+            'lane_left_boundary_positions': l_left,
+            'lane_right_boundary_positions': l_right,
             'lane_centers': l_ctr,
             'lane_angles': l_head,
             'lane_attr': l_attr,
             'lane_valid_mask': l_valid_mask,
+            'lane_left_boundary_valid_mask': l_left_valid_mask,
+            'lane_right_boundary_valid_mask': l_right_valid_mask,
             'is_intersections': l_is_int,
             
             'origin': origin.view(1, 2),
@@ -230,6 +268,10 @@ def collate_fn(seq_batch):
             'x_velocity',
             'x_velocity_diff',
             'lane_positions',
+            'lane_left_boundary_positions',
+            'lane_right_boundary_positions',
+            'lane_left_boundary_valid_mask', 
+            'lane_right_boundary_valid_mask',
             'lane_centers',
             'lane_angles',
             'lane_attr',

@@ -159,6 +159,26 @@ class ModelForecast(nn.Module):
         lane_feat = self.lane_embed(lane_normalized.view(-1, L, D).contiguous())
         lane_feat = lane_feat.view(B, M, -1)
 
+        lane_left_boundary_valid_mask = data["lane_left_boundary_valid_mask"]
+        lane_left_boundary_normalized = data["lane_left_boundary_positions"] - data["lane_centers"].unsqueeze(-2)
+        lane_left_boundary_normalized = torch.cat(
+            [lane_left_boundary_normalized, lane_left_boundary_valid_mask[..., None]], dim=-1
+        )
+        B, M, L, D = lane_left_boundary_normalized.shape
+        lane_left_boundary_feat = self.lane_embed(lane_left_boundary_normalized.view(-1, L, D).contiguous())
+        lane_left_boundary_feat = lane_left_boundary_feat.view(B, M, -1)
+        lane_feat += lane_left_boundary_feat
+
+        lane_right_boundary_valid_mask = data["lane_right_boundary_valid_mask"]
+        lane_right_boundary_normalized = data["lane_right_boundary_positions"] - data["lane_centers"].unsqueeze(-2)
+        lane_right_boundary_normalized = torch.cat(
+            [lane_right_boundary_normalized, lane_right_boundary_valid_mask[..., None]], dim=-1
+        )
+        B, M, L, D = lane_right_boundary_normalized.shape
+        lane_right_boundary_feat = self.lane_embed(lane_right_boundary_normalized.view(-1, L, D).contiguous())
+        lane_right_boundary_feat = lane_right_boundary_feat.view(B, M, -1)
+        lane_feat += lane_right_boundary_feat
+
         # type embedding and position embedding
         x_centers = torch.cat([data["x_centers"], data["lane_centers"]], dim=1)
         angles = torch.cat([data["x_angles"][:, :, -1], data["lane_angles"]], dim=1)
