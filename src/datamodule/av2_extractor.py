@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 import numpy as np
 import torch
+import track_handler_py
 import av2.geometry.interpolate as interp_utils
 from av2.map.map_api import ArgoverseStaticMap
 from .av2_data_utils import (
@@ -31,6 +32,10 @@ class Av2Extractor:
         self.ignore_type = ignore_type
         self.num_historical_steps = num_historical_steps
         self.num_future_steps = num_future_steps
+        self.raceline_main = track_handler_py.Track.create_from_csv(
+            "/dev_ws/src/tam_deep_prediction/data/racelines/2025_11_15_Yas_Marina_north_v16_s_based_v6_jerk_0.01_single_final.csv",
+            track_handler_py._cpp_binding.TrackReferenceLines.CENTERLINE
+        )
 
     def save(self, file: Path):
         assert self.save_path is not None
@@ -80,13 +85,19 @@ class Av2Extractor:
 
             padding_mask[node_idx, node_steps] = False
 
-            pos_xy = torch.from_numpy(
-                np.stack(
-                    [actor_df["position_x"].values, actor_df["position_y"].values],
-                    axis=-1,
-                )
-            ).float()
-            heading = torch.from_numpy(actor_df["heading"].values).float()
+            pos_xy = np.stack(
+                [actor_df["position_x"].values, actor_df["position_y"].values],
+                axis=-1,
+            )
+            heading = actor_df["heading"].values
+
+            pos_frenet = self.raceline_main.project_2d_point_on_track_global(
+                pos_xy[:, 0], pos_xy[:, 1], np.zeros_like(pos_xy[:, 0]), 1000.0
+            )
+            chi_frenet = self.raceline_main.calc_chi_from_2d_heading(pos_frenet[:, 0], heading)
+            pos_xy = torch.from_numpy(pos_frenet).float()
+            heading = torch.from_numpy(chi_frenet).float()
+
             velocity = torch.from_numpy(
                 actor_df[["velocity_x", "velocity_y"]].values
             ).float()
@@ -100,7 +111,7 @@ class Av2Extractor:
             lane_positions,
             is_intersections,
             lane_attr,
-        ) = self.get_lane_features(am)
+        ) = self.get_lane_features(self, am)
 
         return {
             "x_positions": x,
@@ -120,6 +131,7 @@ class Av2Extractor:
 
     @staticmethod
     def get_lane_features(
+        self,
         am: ArgoverseStaticMap,
     ):
         lane_segments = am.get_scenario_lane_segments()
@@ -131,7 +143,13 @@ class Av2Extractor:
                 right_ln_boundary=segment.right_lane_boundary.xyz,
                 num_interp_pts=segment.right_lane_boundary.xyz.shape[0],
             )
-            lane_centerline = torch.from_numpy(segment.centerline.xyzv[:, [0, 1, 3]]).float()
+            centerline_segment_x = segment.centerline.xyzv[:, 0]
+            centerline_segment_y = segment.centerline.xyzv[:, 1]
+            centerline_segment_v = segment.centerline.xyzv[:, 3]
+            frenet_centerline_segment_xy = self.raceline_main.project_2d_point_on_track_global(
+                centerline_segment_x, centerline_segment_y, np.zeros_like(centerline_segment_x), 1000.0
+            )
+            lane_centerline = torch.from_numpy(np.column_stack((frenet_centerline_segment_xy, centerline_segment_v))).float()
             is_intersection = am.lane_is_in_intersection(segment.id)
 
             lane_positions.append(lane_centerline)
