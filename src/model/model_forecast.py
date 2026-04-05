@@ -51,6 +51,7 @@ class ModelForecast(nn.Module):
         self.drop_path = DropPath(drop_path)
 
         self.lane_embed = LaneEmbeddingLayer(3, embed_dim)
+        self.lane_center_embed = LaneEmbeddingLayer(4, embed_dim)
 
         self.pos_embed = nn.Sequential(
             nn.Linear(4, embed_dim),
@@ -151,12 +152,13 @@ class ModelForecast(nn.Module):
 
         # map encoding
         lane_valid_mask = data["lane_valid_mask"]
-        lane_normalized = data["lane_positions"] - data["lane_centers"].unsqueeze(-2)
+        lane_normalized = data["lane_positions"][..., :2] - data["lane_centers"].unsqueeze(-2)
+        lane_normalized = torch.cat([lane_normalized, data["lane_positions"][..., 2:]], dim=-1)
         lane_normalized = torch.cat(
             [lane_normalized, lane_valid_mask[..., None]], dim=-1
         )
         B, M, L, D = lane_normalized.shape
-        lane_feat = self.lane_embed(lane_normalized.view(-1, L, D).contiguous())
+        lane_feat = self.lane_center_embed(lane_normalized.view(-1, L, D).contiguous())
         lane_feat = lane_feat.view(B, M, -1)
 
         lane_left_boundary_valid_mask = data["lane_left_boundary_valid_mask"]

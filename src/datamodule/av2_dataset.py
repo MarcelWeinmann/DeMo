@@ -93,28 +93,30 @@ class Av2Dataset(Dataset):
         l_right = data['right_lane_boundary_positions']
         l_attr = data['lane_attr']
         l_is_int = data['is_intersections']
-        l_pos = torch.matmul(l_pos.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos.size(1), 2).to(torch.float32)
+        l_pos_xy = l_pos[..., :2]
+        l_pos_v = l_pos[..., 2:]
+
+        l_pos_xy = torch.matmul(l_pos_xy.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos_xy.size(1), 2).to(torch.float32)
         l_left = torch.matmul(l_left.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_left.size(1), 2).to(torch.float32)
         l_right = torch.matmul(l_right.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_right.size(1), 2).to(torch.float32)
 
         # Find index of the minimum distance for each lane
-        dist_sq = l_pos[..., 0]**2 + l_pos[..., 1]**2
+        dist_sq = l_pos_xy[..., 0]**2 + l_pos_xy[..., 1]**2
         closest_idx = torch.argmin(dist_sq, dim=1)
-        idx1 = torch.clamp(closest_idx, max=l_pos.shape[1] - 2)
+        idx1 = torch.clamp(closest_idx, max=l_pos_xy.shape[1] - 2)
         idx2 = idx1 + 1
-        batch_indices = torch.arange(l_pos.shape[0], device=l_pos.device)
-        p1 = l_pos[batch_indices, idx1]
-        p2 = l_pos[batch_indices, idx2]
+        batch_indices = torch.arange(l_pos_xy.shape[0], device=l_pos_xy.device)
+        p1 = l_pos_xy[batch_indices, idx1]
+        p2 = l_pos_xy[batch_indices, idx2]
         l_ctr = (p1 + p2) / 2.0
         l_head = torch.atan2(
             p2[:, 1] - p1[:, 1],
             p2[:, 0] - p1[:, 0],
         )
         l_valid_mask = (
-            (l_pos[:, :, 0] > -self.radius) & (l_pos[:, :, 0] < self.radius)
-            & (l_pos[:, :, 1] > -self.radius) & (l_pos[:, :, 1] < self.radius)
+            (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
+            & (l_pos_xy[:, :, 1] > -self.radius) & (l_pos_xy[:, :, 1] < self.radius)
         )
-
         l_left_valid_mask = (
             (l_left[:, :, 0] > -self.radius) & (l_left[:, :, 0] < self.radius)
             & (l_left[:, :, 1] > -self.radius) & (l_left[:, :, 1] < self.radius)
@@ -123,6 +125,8 @@ class Av2Dataset(Dataset):
             (l_right[:, :, 0] > -self.radius) & (l_right[:, :, 0] < self.radius)
             & (l_right[:, :, 1] > -self.radius) & (l_right[:, :, 1] < self.radius)
         )
+
+        l_pos = torch.cat([l_pos_xy, l_pos_v], dim=-1)
 
         l_mask = l_valid_mask.any(dim=-1)
         l_left_mask = l_left_valid_mask.any(dim=-1)

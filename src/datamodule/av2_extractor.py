@@ -135,10 +135,10 @@ class Av2Extractor:
                 right_ln_boundary=segment.right_lane_boundary.xyz,
                 num_interp_pts=segment.right_lane_boundary.xyz.shape[0],
             )
+
             left_lane_bound = torch.from_numpy(segment.left_lane_boundary.xyz[:, :2]).float()
             right_lane_bound = torch.from_numpy(segment.right_lane_boundary.xyz[:, :2]).float()
-            lane_centerline = torch.from_numpy(segment.centerline.xyz[:, :2]).float()
-
+            lane_centerline = torch.from_numpy(segment.centerline.xyzv[:, [0, 1, 3]]).float()
             is_intersection = am.lane_is_in_intersection(segment.id)
 
             left_lane_boundary_positions.append(left_lane_bound)
