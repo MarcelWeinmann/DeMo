@@ -91,18 +91,21 @@ class Av2Dataset(Dataset):
         l_pos = data['lane_positions']
         l_attr = data['lane_attr']
         l_is_int = data['is_intersections']
-        l_pos = torch.matmul(l_pos.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos.size(1), 2).to(torch.float32)
+        l_pos_xy = l_pos[..., :2]
+        l_pos_v = l_pos[..., 2:]
 
-        l_ctr = l_pos[:, 9:11].mean(dim=1)
+        l_pos_xy = torch.matmul(l_pos_xy.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos_xy.size(1), 2).to(torch.float32)
+
+        l_ctr = l_pos_xy[:, 9:11].mean(dim=1)
         l_head = torch.atan2(
-            l_pos[:, 10, 1] - l_pos[:, 9, 1],
-            l_pos[:, 10, 0] - l_pos[:, 9, 0],
+            l_pos_xy[:, 10, 1] - l_pos_xy[:, 9, 1],
+            l_pos_xy[:, 10, 0] - l_pos_xy[:, 9, 0],
         )
         l_valid_mask = (
-            (l_pos[:, :, 0] > -self.radius) & (l_pos[:, :, 0] < self.radius)
-            & (l_pos[:, :, 1] > -self.radius) & (l_pos[:, :, 1] < self.radius)
+            (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
+            & (l_pos_xy[:, :, 1] > -self.radius) & (l_pos_xy[:, :, 1] < self.radius)
         )
-
+        l_pos = torch.cat([l_pos_xy, l_pos_v], dim=-1)
         l_mask = l_valid_mask.any(dim=-1)
         l_pos = l_pos[l_mask]
         l_is_int = l_is_int[l_mask]
