@@ -44,14 +44,17 @@ class Av2Extractor:
         torch.save(data, save_file)
 
     def get_data(self, file: Path):
-        return self.process(file)
+        df, am, scenario_id = load_av2_df(file)
+        return self.process(df, am, scenario_id)
+    
+    def get_data_external(self, data, am, scenario_id):
+        return self.process(data, am, scenario_id)
 
-    def process(self, raw_path: str, agent_id=None):
-        df, am, scenario_id = load_av2_df(raw_path)
+    def process(self, df, am, scenario_id):
         city = df.city.values[0]
 
         timestamps = list(np.sort(df["timestep"].unique()))
-        cur_df = df[df["timestep"] == timestamps[49]]
+        cur_df = df[df["timestep"] == timestamps[self.num_historical_steps - 1]]
         actor_ids = list(df["track_id"].unique())
         num_nodes = len(actor_ids)
 
