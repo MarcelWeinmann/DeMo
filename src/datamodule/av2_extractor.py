@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 import av2.geometry.interpolate as interp_utils
 from av2.map.map_api import ArgoverseStaticMap
 from .av2_data_utils import (
@@ -146,7 +147,7 @@ class Av2Extractor:
             )
             lane_attrs.append(attribute)
 
-        lane_positions = torch.stack(lane_positions)
+        lane_positions = pad_sequence(lane_positions, batch_first=True)
         is_intersections = torch.Tensor(is_intersections)
         lane_attrs = torch.stack(lane_attrs, dim=0)
 

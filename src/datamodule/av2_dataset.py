@@ -120,7 +120,7 @@ class Av2Dataset(Dataset):
 
         # remove outliers
         nearest_dist = torch.cdist(pos[:, self.num_historical_steps - 1, :2],
-                                   l_pos.view(-1, 2)).min(dim=1).values
+                                   l_pos_xy.view(-1, 2)).min(dim=1).values
         ag_mask = nearest_dist < 5
         ag_mask[0] = True
         pos = pos[ag_mask]
