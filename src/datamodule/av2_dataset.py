@@ -100,18 +100,13 @@ class Av2Dataset(Dataset):
         l_left = torch.matmul(l_left.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_left.size(1), 2).to(torch.float32)
         l_right = torch.matmul(l_right.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_right.size(1), 2).to(torch.float32)
 
-        # Find index of the minimum distance for each lane
-        dist_sq = l_pos_xy[..., 0]**2 + l_pos_xy[..., 1]**2
-        closest_idx = torch.argmin(dist_sq, dim=1)
-        idx1 = torch.clamp(closest_idx, max=l_pos_xy.shape[1] - 2)
-        idx2 = idx1 + 1
-        batch_indices = torch.arange(l_pos_xy.shape[0], device=l_pos_xy.device)
-        p1 = l_pos_xy[batch_indices, idx1]
-        p2 = l_pos_xy[batch_indices, idx2]
-        l_ctr = (p1 + p2) / 2.0
+        mid_idx = l_pos_xy.shape[1] // 2
+
+        l_ctr = l_pos_xy[:, mid_idx-1:mid_idx+1].mean(dim=1)
         l_head = torch.atan2(
-            p2[:, 1] - p1[:, 1],
-            p2[:, 0] - p1[:, 0],
+            l_pos_xy[:, mid_idx, 1] - l_pos_xy[:, mid_idx-1, 1],
+            l_pos_xy[:, mid_idx, 0] - l_pos_xy[:, mid_idx-1, 0],
+
         )
         l_valid_mask = (
             (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
@@ -155,8 +150,8 @@ class Av2Dataset(Dataset):
 
         # remove outliers
         nearest_dist = torch.cdist(pos[:, self.num_historical_steps - 1, :2],
-                                   l_pos.view(-1, 2)).min(dim=1).values
-        ag_mask = nearest_dist < 5
+                                   l_pos_xy.view(-1, 2)).min(dim=1).values
+        ag_mask = nearest_dist < 20
         ag_mask[0] = True
         pos = pos[ag_mask]
         head = head[ag_mask]

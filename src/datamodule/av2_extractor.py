@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 import numpy as np
 import torch
+from torch.nn.utils.rnn import pad_sequence
 import av2.geometry.interpolate as interp_utils
 from av2.map.map_api import ArgoverseStaticMap
 from .av2_data_utils import (
@@ -44,14 +45,17 @@ class Av2Extractor:
         torch.save(data, save_file)
 
     def get_data(self, file: Path):
-        return self.process(file)
+        df, am, scenario_id = load_av2_df(file)
+        return self.process(df, am, scenario_id)
+    
+    def get_data_external(self, data, am, scenario_id):
+        return self.process(data, am, scenario_id)
 
-    def process(self, raw_path: str, agent_id=None):
-        df, am, scenario_id = load_av2_df(raw_path)
+    def process(self, df, am, scenario_id):
         city = df.city.values[0]
 
         timestamps = list(np.sort(df["timestep"].unique()))
-        cur_df = df[df["timestep"] == timestamps[49]]
+        cur_df = df[df["timestep"] == timestamps[self.num_historical_steps - 1]]
         actor_ids = list(df["track_id"].unique())
         num_nodes = len(actor_ids)
 
@@ -153,9 +157,9 @@ class Av2Extractor:
             )
             lane_attrs.append(attribute)
 
-        lane_positions = torch.stack(lane_positions)
-        left_lane_boundary_positions = torch.stack(left_lane_boundary_positions)
-        right_lane_boundary_positions = torch.stack(right_lane_boundary_positions)
+        lane_positions = pad_sequence(lane_positions, batch_first=True)
+        left_lane_boundary_positions = pad_sequence(left_lane_boundary_positions, batch_first=True)
+        right_lane_boundary_positions = pad_sequence(right_lane_boundary_positions, batch_first=True)
         is_intersections = torch.Tensor(is_intersections)
         lane_attrs = torch.stack(lane_attrs, dim=0)
 
