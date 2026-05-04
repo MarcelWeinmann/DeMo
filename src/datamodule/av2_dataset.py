@@ -96,10 +96,12 @@ class Av2Dataset(Dataset):
 
         l_pos_xy = torch.matmul(l_pos_xy.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos_xy.size(1), 2).to(torch.float32)
 
-        l_ctr = l_pos_xy[:, 9:11].mean(dim=1)
+        mid_idx = l_pos_xy.shape[1] // 2
+
+        l_ctr = l_pos_xy[:, mid_idx-1:mid_idx+1].mean(dim=1)
         l_head = torch.atan2(
-            l_pos_xy[:, 10, 1] - l_pos_xy[:, 9, 1],
-            l_pos_xy[:, 10, 0] - l_pos_xy[:, 9, 0],
+            l_pos_xy[:, mid_idx, 1] - l_pos_xy[:, mid_idx-1, 1],
+            l_pos_xy[:, mid_idx, 0] - l_pos_xy[:, mid_idx-1, 0],
         )
         l_valid_mask = (
             (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
@@ -121,7 +123,7 @@ class Av2Dataset(Dataset):
         # remove outliers
         nearest_dist = torch.cdist(pos[:, self.num_historical_steps - 1, :2],
                                    l_pos_xy.view(-1, 2)).min(dim=1).values
-        ag_mask = nearest_dist < 5
+        ag_mask = nearest_dist < 20
         ag_mask[0] = True
         pos = pos[ag_mask]
         head = head[ag_mask]
