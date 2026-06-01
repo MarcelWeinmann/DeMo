@@ -251,47 +251,86 @@ class Av2Dataset(Dataset):
 
 def collate_fn(seq_batch):
     seq_data = []
+    flattened_batch = [item for sublist in seq_batch for item in sublist]
+    
+    # 1. Identify keys that have a sequence of points (dim 1)
+    keys_with_points = {
+        'lane_positions',
+        'lane_left_boundary_positions',
+        'lane_right_boundary_positions',
+        'lane_left_boundary_valid_mask',
+        'lane_right_boundary_valid_mask',
+        'lane_valid_mask'
+    }
+    
+    # 2. Identify all lane-related keys to find the absolute maximums
+    lane_keys = [
+        'lane_positions', 'lane_left_boundary_positions', 'lane_right_boundary_positions',
+        'lane_centers', 'lane_angles', 'lane_attr', 'is_intersections',
+        'lane_left_boundary_valid_mask', 'lane_right_boundary_valid_mask', 'lane_valid_mask'
+    ]
+    
+    max_lanes = 0
+    max_points = 0
+    for b in flattened_batch:
+        for key in lane_keys:
+            if key in b:
+                if b[key].shape[0] > max_lanes:
+                    max_lanes = b[key].shape[0]
+                if key in keys_with_points and b[key].dim() >= 2:
+                    if b[key].shape[1] > max_points:
+                        max_points = b[key].shape[1]
+
+    def pad_lane_tensor(tensor, key):
+        if key in keys_with_points and tensor.dim() >= 2:
+            pad_p = max_points - tensor.shape[1]
+            if pad_p > 0:
+                if tensor.dim() == 3:
+                    padding_p = torch.zeros((tensor.shape[0], pad_p, tensor.shape[2]), dtype=tensor.dtype)
+                else:
+                    padding_p = torch.zeros((tensor.shape[0], pad_p), dtype=tensor.dtype)
+                tensor = torch.cat([tensor, padding_p], dim=1)
+                
+        pad_l = max_lanes - tensor.shape[0]
+        if pad_l > 0:
+            padding_l = torch.zeros((pad_l, *tensor.shape[1:]), dtype=tensor.dtype)
+            tensor = torch.cat([tensor, padding_l], dim=0)
+            
+        return tensor
+
     for i in range(len(seq_batch[0])):
-        batch = [b[i] for b in seq_batch]
+        batch = [sublist[i] for sublist in seq_batch]
         data = {}
 
+        for key in ['x_positions_diff', 'x_attr', 'x_positions', 'x_centers',
+                    'x_angles', 'x_velocity', 'x_velocity_diff']:
+            data[key] = pad_sequence([b[key] for b in batch], batch_first=True)
+
         for key in [
-            'x_positions_diff',
-            'x_attr',
-            'x_positions',
-            'x_centers',
-            'x_angles',
-            'x_velocity',
-            'x_velocity_diff',
             'lane_positions',
             'lane_left_boundary_positions',
             'lane_right_boundary_positions',
-            'lane_left_boundary_valid_mask', 
-            'lane_right_boundary_valid_mask',
             'lane_centers',
             'lane_angles',
             'lane_attr',
             'is_intersections',
+            'lane_left_boundary_valid_mask',
+            'lane_right_boundary_valid_mask',
         ]:
-            data[key] = pad_sequence([b[key] for b in batch], batch_first=True)
+            padded_list = [pad_lane_tensor(b[key], key) for b in batch]
+            data[key] = torch.stack(padded_list, dim=0)
 
         if 'x_scored' in batch[0]:
-            data['x_scored'] = pad_sequence(
-                [b['x_scored'] for b in batch], batch_first=True
-            )
+            data['x_scored'] = pad_sequence([b['x_scored'] for b in batch], batch_first=True)
 
         if batch[0]['target'] is not None:
             data['target'] = pad_sequence([b['target'] for b in batch], batch_first=True)
             data['target_diff'] = pad_sequence([b['target_diff'] for b in batch], batch_first=True)
             data['target_vel_diff'] = pad_sequence([b['target_vel_diff'] for b in batch], batch_first=True)
-            data['target_mask'] = pad_sequence(
-                [b['target_mask'] for b in batch], batch_first=True, padding_value=False
-            )
+            data['target_mask'] = pad_sequence([b['target_mask'] for b in batch], batch_first=True, padding_value=False)
 
-        for key in ['x_valid_mask', 'lane_valid_mask']:
-            data[key] = pad_sequence(
-                [b[key] for b in batch], batch_first=True, padding_value=False
-            )
+        data['lane_valid_mask'] = torch.stack([pad_lane_tensor(b['lane_valid_mask'], 'lane_valid_mask') for b in batch], dim=0)
+        data['x_valid_mask'] = pad_sequence([b['x_valid_mask'] for b in batch], batch_first=True, padding_value=False)
 
         data['x_key_valid_mask'] = data['x_valid_mask'].any(-1)
         data['lane_key_valid_mask'] = data['lane_valid_mask'].any(-1)
@@ -303,4 +342,5 @@ def collate_fn(seq_batch):
         data['theta'] = torch.cat([b['theta'] for b in batch])
         data['timestamp'] = torch.cat([b['timestamp'] for b in batch])
         seq_data.append(data)
+        
     return seq_data
