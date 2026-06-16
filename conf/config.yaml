@@ -19,13 +19,17 @@ checkpoint:
 pretrained_weights:
 output: change_${datamodule.name}_${datamodule.phase}_${model.name}_${model.phase}
 
+# Specific Configs
+use_raceline: False
+use_raceline_velocity: False
+
 # trainer
 num_workers: 4
 gpus: 1  # when test, only use 1 gpu; when train/val, use 8 gpus
 sync_bn: true
 batch_size: 16
-epochs: 60
-warmup_epochs: 10
+epochs: 800
+warmup_epochs: 50
 
 # optimizer
 lr: 0.003  

@@ -12,7 +12,10 @@ target:
   num_workers: ${num_workers}
   pin_memory: True
   dataset:
-    num_historical_steps: 30
-    sequence_origins: [30, 40, 50]
-    radius: 150.0
+    num_historical_steps: 10
+    num_future_steps: 40
+    sequence_origins: [10, 20, 30]
+    radius: 250.0
     train_mode: 'only_focal'
+    use_raceline: ${use_raceline}
+    use_raceline_velocity: ${use_raceline_velocity}

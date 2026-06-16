@@ -24,6 +24,8 @@ class Av2Extractor:
         remove_outlier_actors: bool = True,
         num_historical_steps: int = 50,
         num_future_steps: int = 60,
+        use_raceline: bool = True,
+        use_raceline_velocity: bool = False
     ) -> None:
         self.save_path = save_path
         self.mode = mode
@@ -32,6 +34,8 @@ class Av2Extractor:
         self.ignore_type = ignore_type
         self.num_historical_steps = num_historical_steps
         self.num_future_steps = num_future_steps
+        self.use_raceline = use_raceline
+        self.use_raceline_velocity = use_raceline_velocity
 
     def save(self, file: Path):
         assert self.save_path is not None
@@ -104,7 +108,7 @@ class Av2Extractor:
             lane_positions,
             is_intersections,
             lane_attr,
-        ) = self.get_lane_features(am)
+        ) = self.get_lane_features(self, am)
 
         return {
             "x_positions": x,
@@ -124,18 +128,24 @@ class Av2Extractor:
 
     @staticmethod
     def get_lane_features(
+        self,
         am: ArgoverseStaticMap,
     ):
         lane_segments = am.get_scenario_lane_segments()
 
         lane_positions, is_intersections, lane_attrs = [], [], []
         for segment in lane_segments:
-            _, lane_width = interp_utils.compute_midpoint_line(
+            centerline, lane_width = interp_utils.compute_midpoint_line(
                 left_ln_boundary=segment.left_lane_boundary.xyz,
                 right_ln_boundary=segment.right_lane_boundary.xyz,
                 num_interp_pts=segment.right_lane_boundary.xyz.shape[0],
             )
-            lane_centerline = torch.from_numpy(segment.centerline.xyzv[:, [0, 1, 3]]).float()
+            lane_centerline = torch.from_numpy(centerline).float()
+            if self.use_raceline:
+                lane_centerline = torch.from_numpy(segment.centerline.xyz[:, [0, 1]]).float()
+            if self.use_raceline and self.use_raceline_velocity:
+                lane_centerline = torch.from_numpy(segment.centerline.xyzv[:, [0, 1, 3]]).float()
+                lane_centerline[:, 2] = torch.clamp(lane_centerline[:, 2], min=0.0) / 70.0
             is_intersection = am.lane_is_in_intersection(segment.id)
 
             lane_positions.append(lane_centerline)

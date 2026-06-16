@@ -16,7 +16,8 @@ class Av2Dataset(Dataset):
         sequence_origins: List[int] = [50],
         radius: float = 150.0,
         train_mode: str = 'only_focal',
-
+        use_raceline: bool = True,
+        use_raceline_velocity: bool = False
     ):
         assert train_mode in ['only_focal', 'focal_and_scored']
         assert split in ['train', 'val', 'test']
@@ -29,6 +30,8 @@ class Av2Dataset(Dataset):
         self.sequence_origins = sequence_origins
         self.mode = 'only_focal' if split != 'train' else train_mode
         self.radius = radius
+        self.use_raceline = use_raceline
+        self.use_raceline_velocity = use_raceline_velocity
 
         print(
             f'data root: {data_root}/{split}, total number of files: {len(self.file_list)}'
@@ -92,7 +95,8 @@ class Av2Dataset(Dataset):
         l_attr = data['lane_attr']
         l_is_int = data['is_intersections']
         l_pos_xy = l_pos[..., :2]
-        l_pos_v = l_pos[..., 2:]
+        if self.use_raceline_velocity:
+            l_pos_v = l_pos[..., 2:]
 
         l_pos_xy = torch.matmul(l_pos_xy.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos_xy.size(1), 2).to(torch.float32)
 
@@ -105,7 +109,8 @@ class Av2Dataset(Dataset):
             (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
             & (l_pos_xy[:, :, 1] > -self.radius) & (l_pos_xy[:, :, 1] < self.radius)
         )
-        l_pos = torch.cat([l_pos_xy, l_pos_v], dim=-1)
+        if self.use_raceline_velocity:
+            l_pos = torch.cat([l_pos_xy, l_pos_v], dim=-1)
         l_mask = l_valid_mask.any(dim=-1)
         l_pos = l_pos[l_mask]
         l_is_int = l_is_int[l_mask]

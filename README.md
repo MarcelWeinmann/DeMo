@@ -72,7 +72,7 @@ data_root
 
 ### Preprocess
 ```
-python preprocess.py --data_root=/path/to/data_root -p
+python3 preprocess.py --data_root /dev_ws/src/tam_deep_prediction/data/raceverse_autonoma_v4/full/ --num_historical_steps 10 --num_future_steps 40 --use_raceline --use_raceline_velocity -p
 ```
 
 ### The structure of the dataset after processing

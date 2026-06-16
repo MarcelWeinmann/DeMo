@@ -17,3 +17,4 @@ target:
     sequence_origins: [10]
     radius: 250.0
     train_mode: 'only_focal'
+    use_raceline_velocity: ${use_raceline_velocity}

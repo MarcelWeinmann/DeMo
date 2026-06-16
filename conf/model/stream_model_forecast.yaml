@@ -7,13 +7,14 @@ target:
   model:
     type: 'StreamModelForecast'
     embed_dim: 128
-    future_steps: 60
+    future_steps: 40
     num_heads: 8
     mlp_ratio: 4.0
     qkv_bias: False
     drop_path: 0.2
     use_stream_encoder: True
     use_stream_decoder: True
+    use_raceline_velocity: ${use_raceline_velocity}
   pretrained_weights: ${pretrained_weights}
   lr: ${lr}
   weight_decay: ${weight_decay}

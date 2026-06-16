@@ -24,6 +24,7 @@ class ModelForecast(nn.Module):
         qkv_bias=False,
         drop_path=0.2,
         future_steps: int = 60,
+        use_raceline_velocity: bool = False,
     ) -> None:
         super().__init__()
 
@@ -50,7 +51,10 @@ class ModelForecast(nn.Module):
         self.norm_f = RMSNorm(embed_dim, eps=1e-5)
         self.drop_path = DropPath(drop_path)
 
-        self.lane_embed = LaneEmbeddingLayer(4, embed_dim)
+        self.use_raceline_velocity = use_raceline_velocity
+        self.lane_embed = LaneEmbeddingLayer(3, embed_dim)
+        if self.use_raceline_velocity:
+            self.lane_embed = LaneEmbeddingLayer(4, embed_dim)
 
         self.pos_embed = nn.Sequential(
             nn.Linear(4, embed_dim),
@@ -152,7 +156,8 @@ class ModelForecast(nn.Module):
         # map encoding
         lane_valid_mask = data["lane_valid_mask"]
         lane_normalized = data["lane_positions"][..., :2] - data["lane_centers"].unsqueeze(-2)
-        lane_normalized = torch.cat([lane_normalized, data["lane_positions"][..., 2:]], dim=-1)
+        if self.use_raceline_velocity:
+            lane_normalized = torch.cat([lane_normalized, data["lane_positions"][..., 2:]], dim=-1)
         lane_normalized = torch.cat(
             [lane_normalized, lane_valid_mask[..., None]], dim=-1
         )
