@@ -60,6 +60,17 @@ class Av2Dataset(Dataset):
         
         return sequence_data
 
+    @staticmethod
+    def get_lane_num_points(data):
+        if 'lane_num_points' in data:
+            return data['lane_num_points'].long()
+
+        # data preprocessed before 'lane_num_points' was stored: recover the
+        # counts from the trailing pad_sequence zeros, which real map points
+        # (map coordinates, always well away from the map origin) never are
+        real = (data['lane_positions'][..., :2] != 0).any(dim=-1)
+        return real.size(1) - real.flip(-1).long().argmax(dim=-1)
+
     def process_single_agent(self, data, idx, step=50):
         # info for cur_agent on cur_step
         cur_agent_id = data['agent_ids'][idx]
@@ -98,19 +109,37 @@ class Av2Dataset(Dataset):
         if self.use_raceline_velocity:
             l_pos_v = l_pos[..., 2:]
 
+        # slots past a segment's real length hold pad_sequence zeros in *map*
+        # coordinates, so the transform below turns them into a phantom lane
+        # point at the projected map origin. Track them and never use them.
+        l_num_pts = self.get_lane_num_points(data)
+        l_pad_mask = torch.arange(l_pos.size(1))[None, :] >= l_num_pts[:, None]
+
         l_pos_xy = torch.matmul(l_pos_xy.reshape(-1, 2).double() - origin, rotate_mat).reshape(-1, l_pos_xy.size(1), 2).to(torch.float32)
 
-        l_ctr = l_pos_xy[:, 9:11].mean(dim=1)
+        # points 9 and 10 define center and heading, clamped to the real points
+        # of short segments (same convention as the C++ feature builder)
+        seg_idx = torch.arange(l_pos_xy.size(0))
+        idx_a = torch.clamp(l_num_pts - 1, max=9)
+        idx_b = torch.clamp(l_num_pts - 1, max=10)
+        l_ctr = 0.5 * (l_pos_xy[seg_idx, idx_a] + l_pos_xy[seg_idx, idx_b])
         l_head = torch.atan2(
-            l_pos_xy[:, 10, 1] - l_pos_xy[:, 9, 1],
-            l_pos_xy[:, 10, 0] - l_pos_xy[:, 9, 0],
+            l_pos_xy[seg_idx, idx_b, 1] - l_pos_xy[seg_idx, idx_a, 1],
+            l_pos_xy[seg_idx, idx_b, 0] - l_pos_xy[seg_idx, idx_a, 0],
         )
         l_valid_mask = (
             (l_pos_xy[:, :, 0] > -self.radius) & (l_pos_xy[:, :, 0] < self.radius)
             & (l_pos_xy[:, :, 1] > -self.radius) & (l_pos_xy[:, :, 1] < self.radius)
+            & ~l_pad_mask
         )
+
+        # real, in-window lane points in the local frame, for the outlier filter
+        valid_lane_points = l_pos_xy[l_valid_mask]
+
         if self.use_raceline_velocity:
             l_pos = torch.cat([l_pos_xy, l_pos_v], dim=-1)
+        else:
+            l_pos = l_pos_xy
         l_mask = l_valid_mask.any(dim=-1)
         l_pos = l_pos[l_mask]
         l_is_int = l_is_int[l_mask]
@@ -124,9 +153,12 @@ class Av2Dataset(Dataset):
         )
 
         # remove outliers
-        nearest_dist = torch.cdist(pos[:, self.num_historical_steps - 1, :2],
-                                   l_pos_xy.view(-1, 2)).min(dim=1).values
-        ag_mask = nearest_dist < 5
+        if valid_lane_points.size(0) > 0:
+            nearest_dist = torch.cdist(pos[:, self.num_historical_steps - 1, :2],
+                                       valid_lane_points).min(dim=1).values
+            ag_mask = nearest_dist < 5
+        else:
+            ag_mask = torch.ones(pos.size(0), dtype=torch.bool)
         ag_mask[0] = True
         pos = pos[ag_mask]
         head = head[ag_mask]

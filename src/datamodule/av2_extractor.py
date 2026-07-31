@@ -106,6 +106,7 @@ class Av2Extractor:
 
         (
             lane_positions,
+            lane_num_points,
             is_intersections,
             lane_attr,
         ) = self.get_lane_features(self, am)
@@ -117,6 +118,7 @@ class Av2Extractor:
             "x_velocity": x_velocity,
             "x_valid_mask": ~padding_mask,
             "lane_positions": lane_positions,
+            "lane_num_points": lane_num_points,
             "lane_attr": lane_attr,
             "is_intersections": is_intersections,
             "scenario_id": scenario_id,
@@ -157,12 +159,18 @@ class Av2Extractor:
             )
             lane_attrs.append(attribute)
 
+        # segments may have different lengths, so keep the real point count per
+        # segment: everything past it is pad_sequence filler, not lane geometry
+        lane_num_points = torch.tensor(
+            [len(pos) for pos in lane_positions], dtype=torch.long
+        )
         lane_positions = pad_sequence(lane_positions, batch_first=True)
         is_intersections = torch.Tensor(is_intersections)
         lane_attrs = torch.stack(lane_attrs, dim=0)
 
         return (
             lane_positions,
+            lane_num_points,
             is_intersections,
             lane_attrs,
         )
