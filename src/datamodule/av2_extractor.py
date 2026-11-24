@@ -25,8 +25,13 @@ class Av2Extractor:
         num_historical_steps: int = 50,
         num_future_steps: int = 60,
         use_raceline: bool = True,
-        use_raceline_velocity: bool = False
+        use_raceline_velocity: bool = False,
+        speed_cap_column: str = None,
     ) -> None:
+        """speed_cap_column: parquet column with the race-control speed cap in km/h (e.g. speed_cap_kph: 0 = no cap,
+        60/80/100/130, 255 = stop (a 0 km/h target); the same for every track). Its value at t0 is written to
+        x_attr[:, 0] of every agent (instead of the detailed object type, which the model does not read) and to
+        data['speed_cap_kph'], for ModelForecast(use_speed_cap=True). None (default): no cap, the output is unchanged."""
         self.save_path = save_path
         self.mode = mode
         self.radius = radius
@@ -36,6 +41,7 @@ class Av2Extractor:
         self.num_future_steps = num_future_steps
         self.use_raceline = use_raceline
         self.use_raceline_velocity = use_raceline_velocity
+        self.speed_cap_column = speed_cap_column
 
     def save(self, file: Path):
         assert self.save_path is not None
@@ -126,7 +132,21 @@ class Av2Extractor:
             "focal_idx": focal_idx,
             "scored_idx": scored_idx,
             "city": city,
+            **self.speed_cap(df, timestamps, x_attr),
         }
+
+    def speed_cap(self, df, timestamps, x_attr):
+        """the speed cap at t0 written into x_attr[:, 0] (see __init__); {} when speed_cap_column is None"""
+        if self.speed_cap_column is None:
+            return {}
+        if self.speed_cap_column not in df.columns:
+            raise ValueError(f"no column {self.speed_cap_column} in the scenario (preprocess without --speed_cap_column "
+                             f"for data without a speed cap)")
+        cur = df.loc[df["timestep"] == timestamps[self.num_historical_steps - 1], self.speed_cap_column]
+        cap = int(cur.max()) if len(cur) else 0
+        assert 0 <= cap <= 255, f"speed cap {cap} km/h does not fit x_attr (uint8)"
+        x_attr[:, 0] = cap
+        return {"speed_cap_kph": cap}
 
     @staticmethod
     def get_lane_features(

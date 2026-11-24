@@ -20,8 +20,10 @@ pretrained_weights:
 output: change_${datamodule.name}_${datamodule.phase}_${model.name}_${model.phase}
 
 # Specific Configs
-use_raceline: False
+use_raceline: True
 use_raceline_velocity: False
+use_speed_cap: False
+speed_cap_levels: [0, 60, 80, 100, 130]
 
 # trainer
 num_workers: 4

@@ -12,6 +12,8 @@ target:
     qkv_bias: False
     drop_path: 0.2
     use_raceline_velocity: ${use_raceline_velocity}
+    use_speed_cap: ${use_speed_cap}
+    speed_cap_levels: ${speed_cap_levels}
   pretrained_weights: ${pretrained_weights}
   lr: ${lr}
   weight_decay: ${weight_decay}

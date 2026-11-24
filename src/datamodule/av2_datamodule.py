@@ -1,8 +1,16 @@
+import gc
 from pathlib import Path
 from typing import Optional
 from pytorch_lightning import LightningDataModule
 from torch.utils.data import DataLoader as TorchDataLoader
 from .av2_dataset import Av2Dataset, collate_fn
+
+
+def _worker_init(_):
+    # A forked worker inherits the training process's uncollected objects (CUDA tensors among them); freeing them in
+    # the worker segfaults it ("Unexpected segmentation fault encountered in worker", seen in fresh containers).
+    # Freezing them keeps them out of the worker's garbage collection; the worker's own objects are still collected.
+    gc.freeze()
 
 
 class Av2DataModule(LightningDataModule):
@@ -50,6 +58,7 @@ class Av2DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             collate_fn=collate_fn,
+            worker_init_fn=_worker_init,
         )
 
     def val_dataloader(self):
@@ -60,6 +69,7 @@ class Av2DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             collate_fn=collate_fn,
+            worker_init_fn=_worker_init,
         )
 
     def test_dataloader(self):
@@ -70,5 +80,6 @@ class Av2DataModule(LightningDataModule):
             num_workers=self.num_workers,
             pin_memory=self.pin_memory,
             collate_fn=collate_fn,
+            worker_init_fn=_worker_init,
         )
     

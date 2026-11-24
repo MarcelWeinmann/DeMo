@@ -13,6 +13,15 @@ try:
 except ImportError:
     RMSNorm, layer_norm_fn, rms_norm_fn = None, None, None
 
+# Speed cap input (use_speed_cap=True, off by default): the race-control speed cap at t0 as one-hot bits, one per level
+# of speed_cap_levels (km/h; all zero = no cap), appended to every history step of every agent. The cap is read from
+# x_attr[..., 0], where the extractor writes it when preprocessing with --speed_cap_column (av2_extractor.py); column 0
+# holds the detailed object type otherwise, which the model does not use, and object types (0-9) never match a level.
+# Level 0 km/h (stop) is stored as SPEED_CAP_STOP_CODE, since 0 means "no cap" in the data and is every vehicle's
+# object type. The first speed-cap models (outputs/full_perturbation_speedcap*) were trained with (60, 80, 100, 130).
+SPEED_CAP_LEVELS_KPH = (0, 60, 80, 100, 130)
+from ..datamodule.speed_cap import SPEED_CAP_STOP_CODE  # noqa: E402  (255; the target -> code mapping lives there)
+
 
 # only 'DeMo'
 class ModelForecast(nn.Module):
@@ -25,12 +34,21 @@ class ModelForecast(nn.Module):
         drop_path=0.2,
         future_steps: int = 60,
         use_raceline_velocity: bool = False,
+        use_speed_cap: bool = False,
+        speed_cap_levels=SPEED_CAP_LEVELS_KPH,
     ) -> None:
         super().__init__()
 
         self.future_steps = future_steps
+        self.use_speed_cap = use_speed_cap
+        n_cap_bits = 0
+        if use_speed_cap:
+            codes = [SPEED_CAP_STOP_CODE if int(l) == 0 else int(l) for l in speed_cap_levels]
+            assert len(set(codes)) == len(codes) and all(0 < c <= 255 for c in codes), f"speed_cap_levels {speed_cap_levels}"
+            self.register_buffer("speed_cap_codes", torch.tensor(codes), persistent=False)
+            n_cap_bits = len(codes)
         self.hist_embed_mlp = nn.Sequential(
-            nn.Linear(4, 64),
+            nn.Linear(4 + n_cap_bits, 64),
             nn.GELU(),
             nn.Linear(64, embed_dim),
         )
@@ -117,14 +135,15 @@ class ModelForecast(nn.Module):
         # agent encoding
         hist_valid_mask = data["x_valid_mask"]
         hist_key_valid_mask = data["x_key_valid_mask"]
-        hist_feat = torch.cat(
-            [
-                data["x_positions_diff"],
-                data["x_velocity_diff"][..., None],
-                hist_valid_mask[..., None],
-            ],
-            dim=-1,
-        )
+        hist_inputs = [
+            data["x_positions_diff"],
+            data["x_velocity_diff"][..., None],
+            hist_valid_mask[..., None],
+        ]
+        if self.use_speed_cap:
+            cap_bits = (data["x_attr"][..., 0:1].long() == self.speed_cap_codes).float()  # (B, N, levels)
+            hist_inputs.append(cap_bits[:, :, None, :].expand(-1, -1, data["x_positions_diff"].size(2), -1))
+        hist_feat = torch.cat(hist_inputs, dim=-1)
 
         B, N, L, D = hist_feat.shape
         hist_feat = hist_feat.view(B * N, L, D)
